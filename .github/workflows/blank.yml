@@ -1,74 +1,26 @@
-name: Deploy to EC2 using GitHub Actions
+name: CI/CD Pipeline for Simple Web App
 
 on:
   push:
     branches:
-      - main
+      - main  # Trigger the pipeline on push to the main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Copy repository to EC2
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          source: "."
-          target: "/tmp/site"
-
-      - name: Deploy on EC2 (run remote commands)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          script: |
-            set -euo pipefail
-
-            # Prepare docroot
-            sudo mkdir -p /usr/share/nginx/html
-            sudo rm -rf /usr/share/nginx/html/*
-
-            # Copy uploaded files (handle if /tmp/site is empty)
-            if [ -d /tmp/site ]; then
-              sudo cp -r /tmp/site/* /usr/share/nginx/html/ || true
-            else
-              echo "/tmp/site not found or empty — nothing to copy"
-            fi
-
-            sudo chown -R www-data:www-data /usr/share/nginx/html || true
-            sudo chmod -R 755 /usr/share/nginx/html || true
-
-            # Ensure nginx is installed (install if missing)
-            if ! command -v nginx >/dev/null 2>&1; then
-              echo "nginx not found — attempting to install"
-              if command -v apt-get >/dev/null 2>&1; then
-                sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
-                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
-              elif command -v yum >/dev/null 2>&1; then
-                sudo yum install -y nginx
-              else
-                echo "No supported package manager (apt-get or yum) found to install nginx."
-                exit 1
-              fi
-            fi
-
-            # Try to restart nginx in several ways
-            if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q nginx; then
-              sudo systemctl restart nginx
-            elif command -v service >/dev/null 2>&1 && service --status-all 2>/dev/null | grep -q nginx; then
-              sudo service nginx restart || true
-            elif command -v nginx >/dev/null 2>&1; then
-              sudo nginx -s reload || sudo nginx || true
-            else
-              echo "nginx not installed on the instance even after attempted install. Install with apt/yum or adjust the service name."
-              exit 1
-            fi
+    - name: SSH into EC2 and deploy app
+      uses: appleboy/ssh-action@v0.1.6
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ec2-user
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          cd /var/www/html
+          git pull origin main
+          sudo systemctl restart nginx
