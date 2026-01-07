@@ -8,75 +8,37 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      EC2_HOST: ${{ secrets.EC2_HOST }}
-      EC2_USER: ${{ secrets.EC2_USER }}
-      EC2_PORT: ${{ secrets.EC2_PORT }}   # optional; leave empty or unset for 22
-      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prepare SSH key and known_hosts
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          # Write private key (remove Windows CRLFs if present)
-          printf '%s\n' "$EC2_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-
-          # Determine port (default 22)
-          PORT="${EC2_PORT:-22}"
-
-          # Add host key to known_hosts (best-effort)
-          if [ -n "$EC2_HOST" ]; then
-            ssh-keyscan -p "$PORT" -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          fi
-
-      - name: Verify SSH connectivity
-        run: |
-          set -euo pipefail
-          PORT="${EC2_PORT:-22}"
-          echo "Testing SSH connection to ${EC2_USER}@${EC2_HOST}:${PORT} (will not print secret material)..."
-          ssh -i ~/.ssh/id_rsa -o BatchMode=yes -o ConnectTimeout=10 -p "$PORT" "$EC2_USER@$EC2_HOST" "echo SSH_OK"
-        # If this fails you'll get a clear "unable to authenticate" or other SSH error
-
-      - name: Create tarball of repo (exclude .git)
-        run: |
-          set -euo pipefail
-          TAR_PATH=/tmp/site.tar.gz
-          # Exclude the .git directory to avoid sending git history
-          tar --exclude='.git' -czf "$TAR_PATH" .
-          ls -lh "$TAR_PATH"
-
-      - name: Upload tarball to EC2
-        run: |
-          set -euo pipefail
-          PORT="${EC2_PORT:-22}"
-          scp -P "$PORT" -o StrictHostKeyChecking=yes -i ~/.ssh/id_rsa /tmp/site.tar.gz "${EC2_USER}@${EC2_HOST}:/tmp/site.tar.gz"
+      - name: Copy repository to EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          source: "."
+          target: "/tmp/site"
 
       - name: Deploy on EC2 (run remote commands)
-        run: |
-          set -euo pipefail
-          PORT="${EC2_PORT:-22}"
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes -p "$PORT" "${EC2_USER}@${EC2_HOST}" <<'REMOTE'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
             set -euo pipefail
 
             # Prepare docroot
             sudo mkdir -p /usr/share/nginx/html
             sudo rm -rf /usr/share/nginx/html/*
 
-            # Extract uploaded archive (create /tmp/site and extract there)
-            mkdir -p /tmp/site
-            if [ -f /tmp/site.tar.gz ]; then
-              tar -xzf /tmp/site.tar.gz -C /tmp/site || true
-            else
-              echo "/tmp/site.tar.gz not found on remote — nothing to extract"
-            fi
-
             # Copy uploaded files (handle if /tmp/site is empty)
-            if [ -d /tmp/site ] && [ "$(ls -A /tmp/site || true)" != "" ]; then
+            if [ -d /tmp/site ]; then
               sudo cp -r /tmp/site/* /usr/share/nginx/html/ || true
             else
               echo "/tmp/site not found or empty — nothing to copy"
@@ -99,7 +61,7 @@ jobs:
               fi
             fi
 
-            # Try to restart nginx in multiple ways
+            # Try to restart nginx in several ways
             if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q nginx; then
               sudo systemctl restart nginx
             elif command -v service >/dev/null 2>&1 && service --status-all 2>/dev/null | grep -q nginx; then
@@ -110,9 +72,3 @@ jobs:
               echo "nginx not installed on the instance even after attempted install. Install with apt/yum or adjust the service name."
               exit 1
             fi
-REMOTE
-
-      - name: Cleanup local tarball
-        if: always()
-        run: |
-          rm -f /tmp/site.tar.gz || true
