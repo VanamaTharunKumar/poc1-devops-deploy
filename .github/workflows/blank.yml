@@ -21,6 +21,10 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           port: 22
           script: |
-            sudo rm -rf /var/www/html/*
-            sudo cp -r * /var/www/html/
-            sudo systemctl restart nginx
+            echo "Deploying application to EC2 instance"
+            cd /var/www/html
+
+            # assuming we already have git repo cloned on the server
+            cat index.html
+
+            # sudo systemctl restart nginx
