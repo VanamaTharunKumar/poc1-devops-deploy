@@ -19,7 +19,7 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ec2-user
         key: ${{ secrets.EC2_SSH_KEY }}
-        port: 23
+        port: 22
         script: |
           cd /var/www/html
           git pull origin main
