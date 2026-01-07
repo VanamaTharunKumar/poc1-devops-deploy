@@ -1,0 +1,26 @@
+name: CI/CD Pipeline for Simple Web App
+
+on:
+  push:
+    branches:
+      - main  # Trigger the pipeline on push to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: SSH into EC2 and deploy app
+      uses: appleboy/ssh-action@v0.1.6
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ec2-user
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          cd /var/www/html
+          git pull origin main
+          sudo systemctl restart nginx
