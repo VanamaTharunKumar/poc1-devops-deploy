@@ -36,7 +36,7 @@ jobs:
             # Prepare docroot
             sudo mkdir -p /usr/share/nginx/html
             sudo rm -rf /usr/share/nginx/html/*
-
+            sudo mv /usr/share/nginx/html /var/www/html
             # Copy uploaded files (handle if /tmp/site is empty)
             if [ -d /tmp/site ]; then
               sudo cp -r /tmp/site/* /usr/share/nginx/html/ || true
