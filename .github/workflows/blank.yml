@@ -25,13 +25,16 @@ jobs:
           script: |
             echo "Connected to EC2"
 
-            # GO to app directory
-            cd /var/www/html || exit 1
+            # Go to application repo directory
+            cd /home/ec2-user/app-repo || exit 1
 
-            # Assuming repo already exists -> do pull
-            echo "Pulling latest changes"
-            sudo git pull origin main
+            echo "Pulling latest code"
+            git pull origin main
 
+            echo "Copying index.html to Nginx path"
+            sudo cp index.html /var/www/html/index.html
+
+            echo "Restarting Nginx"
             sudo systemctl restart nginx
 
-            echo "Deployment Completed Succesfully"
+            echo "Deployment Completed Successfully"
