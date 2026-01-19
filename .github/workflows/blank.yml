@@ -10,31 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1 - Checkout repo
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2 - SSH into EC2 and deploy
-      - name: Deploy to EC2 via SSH
+      - name: Copy index.html to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "index.html"
+          target: "/tmp"
+
+      - name: Move to nginx and restart
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
           script: |
-            echo "Connected to EC2"
-
-            # Go to application repo directory
-            cd /home/ec2-user/app-repo || exit 1
-
-            echo "Pulling latest code"
-            git pull origin main
-
-            echo "Copying index.html to Nginx path"
-            sudo cp index.html /var/www/html/index.html
-
-            echo "Restarting Nginx"
+            sudo mv /tmp/index.html /var/www/html/index.html
             sudo systemctl restart nginx
-
-            echo "Deployment Completed Successfully"
